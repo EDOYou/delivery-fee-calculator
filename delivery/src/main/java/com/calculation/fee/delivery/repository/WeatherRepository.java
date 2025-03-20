@@ -2,7 +2,13 @@ package com.calculation.fee.delivery.repository;
 
 import com.calculation.fee.delivery.model.Weather;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 @Repository
-public interface WeatherRepository extends JpaRepository<Weather, Long> { }
+public interface WeatherRepository extends JpaRepository<Weather, Long> {
+    @Query("SELECT w FROM Weather w WHERE w.stationName = :stationName ORDER BY w.timestamp DESC LIMIT 1")
+    Optional<Weather> getLatestWeatherForStation(String stationName);
+}
