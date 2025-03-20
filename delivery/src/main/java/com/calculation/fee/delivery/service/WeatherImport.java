@@ -1,5 +1,6 @@
 package com.calculation.fee.delivery.service;
 
+import com.calculation.fee.delivery.model.City;
 import com.calculation.fee.delivery.model.Weather;
 import com.calculation.fee.delivery.repository.WeatherRepository;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
@@ -15,14 +16,15 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 public class WeatherImport {
 
-    private static final List<String> REQUIRED_STATIONS = Arrays.asList(
-            "Tallinn-Harku", "Tartu-Tõravere", "Pärnu"
-    );
+    private static final List<String> REQUIRED_STATIONS = Arrays.stream(City.values())
+            .map(City::getStationName)
+            .collect(Collectors.toList());
 
     private final WeatherRepository weatherRepository;
     private final RestTemplate restTemplate;
