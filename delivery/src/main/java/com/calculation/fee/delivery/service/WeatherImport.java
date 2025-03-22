@@ -39,6 +39,21 @@ public class WeatherImport {
         this.xmlMapper = new XmlMapper();
     }
 
+    /**
+     * Imports weather data from the Estonian Environment Agency and saves it to the database.
+     * <p>
+     * This method is scheduled to run periodically (default: every hour at HH:15:00) to fetch weather data
+     * from the configured URL (<a href="https://www.ilmateenistus.ee/ilma_andmed/xml/observations.php">...</a>). It processes
+     * the XML response and extracts weather data for the stations Tallinn-Harku, Tartu-Tõravere, and Pärnu.
+     * The data includes air temperature, wind speed, weather phenomenon etc., and a timestamp, which are saved to
+     * the database as a Weather entity, preserving historical records.
+     * </p>
+     * <p>
+     * If the data fetch or parsing fails (e.g., due to network issues, invalid XML, or missing data), an error
+     * is logged, and the process continues on the next scheduled run. The method handles null or empty values
+     * gracefully by setting corresponding fields to null in the Weather entity.
+     * </p>
+     */
     @Scheduled(cron = "${weather.import.cron:0 15 * * * *}")
     public void importWeatherData() {
         try {

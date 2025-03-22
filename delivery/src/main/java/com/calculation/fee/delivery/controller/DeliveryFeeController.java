@@ -25,6 +25,27 @@ public class DeliveryFeeController {
         this.deliveryFee = deliveryFee;
     }
 
+    /**
+     * Calculates the delivery fee based on the city and vehicle type.
+     * <p>
+     * This endpoint calculates the total delivery fee for a food courier based on the regional base fee (RBF)
+     * and extra fees for weather conditions (ATEF, WSEF, WPEF) in the specified city. The calculation uses the
+     * latest weather data for the city. If the weather conditions forbid the usage of the vehicle type (e.g.,
+     * high wind speed for Bike), an error is returned.
+     * </p>
+     * <p>
+     * Example: GET /api/delivery-fee?city=Tallinn&vehicleType=Car
+     * </p>
+     *
+     * @param city        The city for delivery (e.g., Tallinn, Tartu, Pärnu). Required.
+     * @param vehicleType The vehicle type (e.g., Car, Scooter, Bike). Required.
+     * @return A ResponseEntity containing a map with the calculated fee, currency (EUR), and a message.
+     *         - On success: 200 OK with { "fee": 5.0, "currency": "EUR" }
+     *         - On invalid input: 400 Bad Request with { "error": "Error message" }
+     *         - On forbidden usage: 403 Forbidden with { "error": "Usage forbidden message" }
+     *         - On no weather data: 503 Service Unavailable with { "error": "No weather data available" }
+     *         - On unexpected error: 500 Internal Server Error with { "error": "An unexpected error occurred" }
+     */
     @GetMapping(value = "/delivery-fee")
     public ResponseEntity<Map<String, Object>> calculateDeliveryFee(
             @RequestParam(value = "city", required = false) String city,

@@ -20,6 +20,28 @@ public class DeliveryFee {
         this.weatherRepository = weatherRepository;
     }
 
+    /**
+     * Calculates the total delivery fee for a food courier based on the city and vehicle type.
+     * <p>
+     * This method retrieves the latest weather data for the specified city and calculates the delivery fee
+     * by combining the regional base fee (RBF) with extra fees based on weather conditions:
+     * - Air Temperature Extra Fee (ATEF): Applied for Scooter or Bike if temperature is below 0°C.
+     * - Wind Speed Extra Fee (WSEF): Applied for Bike if wind speed is between 10 m/s and 20 m/s.
+     * - Weather Phenomenon Extra Fee (WPEF): Applied for Scooter or Bike for snow, sleet, or rain.
+     * </p>
+     * <p>
+     * The method throws exceptions for invalid conditions:
+     * <p>- If no weather data is available for the city, an IllegalStateException is thrown.
+     * <p>- If weather conditions forbid the usage of the vehicle type (e.g., wind speed > 20 m/s for Bike,
+     *   or glaze/hail/thunder for Scooter/Bike), a UsageForbiddenException is thrown.
+     * </p>
+     *
+     * @param city        The city for delivery (e.g., Tallinn, Tartu, Pärnu). Must not be null.
+     * @param vehicleType The vehicle type (e.g., Car, Scooter, Bike). Must not be null.
+     * @return The total delivery fee, including the regional base fee and any applicable extra fees.
+     * @throws IllegalStateException If no weather data is available for the specified city.
+     * @throws UsageForbiddenException If weather conditions forbid the usage of the vehicle type.
+     */
     public double calculateDeliveryFee(City city, VehicleType vehicleType) {
         Optional<Weather> latestWeather = weatherRepository.getLatestWeatherForStation(city.getStationName());
         if (latestWeather.isEmpty()) {
