@@ -11,6 +11,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -26,20 +29,21 @@ public class DeliveryFeeController {
     }
 
     /**
-     * Calculates the delivery fee based on the city and vehicle type.
+     * Calculates the delivery fee based on the city, vehicle type, and an optional datetime.
      * <p>
      * This endpoint calculates the total delivery fee for a food courier based on the regional base fee (RBF)
      * and extra fees for weather conditions (ATEF, WSEF, WPEF) in the specified city. The calculation uses the
-     * latest weather data for the city. If the weather conditions forbid the usage of the vehicle type (e.g.,
-     * high wind speed for Bike), an error is returned.
+     * weather data closest to the specified datetime (if provided) or the latest weather data if no datetime is given.
+     * If the weather conditions forbid the usage of the vehicle type (e.g., high wind speed for Bike), an error is returned.
      * </p>
      * <p>
-     * Example: GET /api/delivery-fee?city=Tallinn&vehicleType=Car
+     * Example: GET /api/delivery-fee?city=Tallinn&vehicleType=Car&datetime=2025-03-22T10:00:00
      * </p>
      *
      * @param city        The city for delivery (e.g., Tallinn, Tartu, Pärnu). Required.
      * @param vehicleType The vehicle type (e.g., Car, Scooter, Bike). Required.
-     * @return A ResponseEntity containing a map with the calculated fee, currency (EUR), and a message.
+     * @param datetime    The datetime for which to calculate the fee (optional, format: yyyy-MM-dd'T'HH:mm:ss).
+     * @return A ResponseEntity containing a map with the calculated fee and currency (EUR).
      *         - On success: 200 OK with { "fee": 5.0, "currency": "EUR" }
      *         - On invalid input: 400 Bad Request with { "error": "Error message" }
      *         - On forbidden usage: 403 Forbidden with { "error": "Usage forbidden message" }
@@ -49,7 +53,8 @@ public class DeliveryFeeController {
     @GetMapping(value = "/delivery-fee")
     public ResponseEntity<Map<String, Object>> calculateDeliveryFee(
             @RequestParam(value = "city", required = false) String city,
-            @RequestParam(value = "vehicleType", required = false) String vehicleType) {
+            @RequestParam(value = "vehicleType", required = false) String vehicleType,
+            @RequestParam(value = "datetime", required = false) String datetime) {
         try {
             if (city == null || city.trim().isEmpty()) {
                 log.error("Missing required parameter: city");
@@ -64,11 +69,24 @@ public class DeliveryFeeController {
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
+            LocalDateTime parsedDateTime = null;
+            if (datetime != null && !datetime.trim().isEmpty()) {
+                try {
+                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+                    parsedDateTime = LocalDateTime.parse(datetime, formatter);
+                } catch (DateTimeParseException e) {
+                    log.error("Invalid datetime format: {}", datetime);
+                    Map<String, Object> errorResponse = new HashMap<>();
+                    errorResponse.put("error", "Invalid datetime format. Use yyyy-MM-dd'T'HH:mm:ss (e.g., 2025-03-22T10:00:00)");
+                    return ResponseEntity.badRequest().body(errorResponse);
+                }
+            }
+
             log.info("Received request to calculate delivery fee for city: {}, vehicleType: {}", city, vehicleType);
 
             City parsedCity = City.fromString(city);
             VehicleType parsedVehicleType = VehicleType.fromString(vehicleType);
-            double fee = deliveryFee.calculateDeliveryFee(parsedCity, parsedVehicleType);
+            double fee = deliveryFee.calculateDeliveryFee(parsedCity, parsedVehicleType, parsedDateTime);
 
             Map<String, Object> response = new HashMap<>();
             response.put("fee", fee);

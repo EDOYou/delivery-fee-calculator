@@ -8,6 +8,7 @@ import com.calculation.fee.delivery.repository.WeatherRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Service
@@ -21,36 +22,44 @@ public class DeliveryFee {
     }
 
     /**
-     * Calculates the total delivery fee for a food courier based on the city and vehicle type.
+     * Calculates the total delivery fee based on the city, vehicle type, and optional datetime.
      * <p>
-     * This method retrieves the latest weather data for the specified city and calculates the delivery fee
-     * by combining the regional base fee (RBF) with extra fees based on weather conditions:
+     * This method retrieves the weather data for the specified city, either the latest data or the data closest to
+     * the provided datetime (if specified), and calculates the delivery fee by combining the regional base fee (RBF)
+     * with extra fees based on weather conditions:
      * - Air Temperature Extra Fee (ATEF): Applied for Scooter or Bike if temperature is below 0°C.
      * - Wind Speed Extra Fee (WSEF): Applied for Bike if wind speed is between 10 m/s and 20 m/s.
      * - Weather Phenomenon Extra Fee (WPEF): Applied for Scooter or Bike for snow, sleet, or rain.
      * </p>
      * <p>
      * The method throws exceptions for invalid conditions:
-     * <p>- If no weather data is available for the city, an IllegalStateException is thrown.
+     * <p>- If no weather data is available for the city (or at the specified time), an IllegalStateException is thrown.
      * <p>- If weather conditions forbid the usage of the vehicle type (e.g., wind speed > 20 m/s for Bike,
      *   or glaze/hail/thunder for Scooter/Bike), a UsageForbiddenException is thrown.
      * </p>
      *
      * @param city        The city for delivery (e.g., Tallinn, Tartu, Pärnu). Must not be null.
      * @param vehicleType The vehicle type (e.g., Car, Scooter, Bike). Must not be null.
-     * @return The total delivery fee, including the regional base fee and any applicable extra fees.
-     * @throws IllegalStateException If no weather data is available for the specified city.
+     * @param datetime    The datetime for which to calculate the fee (optional). If null, the latest weather data is used.
+     * @return The total delivery fee in EUR, including the regional base fee and any applicable extra fees.
+     * @throws IllegalStateException If no weather data is available for the specified city or time.
      * @throws UsageForbiddenException If weather conditions forbid the usage of the vehicle type.
      */
-    public double calculateDeliveryFee(City city, VehicleType vehicleType) {
-        Optional<Weather> latestWeather = weatherRepository.getLatestWeatherForStation(city.getStationName());
-        if (latestWeather.isEmpty()) {
-            log.warn("No weather data available for station: {}", city.getStationName());
-            throw new IllegalStateException("No weather data available for " + city.getStationName());
+    public double calculateDeliveryFee(City city, VehicleType vehicleType, LocalDateTime datetime) {
+        Optional<Weather> weatherOptional;
+        if (datetime == null) {
+            weatherOptional = weatherRepository.getLatestWeatherForStation(city.getStationName());
+        } else {
+            weatherOptional = weatherRepository.getWeatherForStationAtOrBefore(city.getStationName(), datetime);
         }
 
-        Weather weather = latestWeather.get();
-        log.info("Calculating fee for city: {}, vehicle: {}, weather: {}", city, vehicleType, weather);
+        if (weatherOptional.isEmpty()) {
+            log.warn("No weather data available for station: {} at or before: {}", city.getStationName(), datetime);
+            throw new IllegalStateException("No weather data available for " + city.getStationName() + (datetime != null ? " at or before " + datetime : ""));
+        }
+
+        Weather weather = weatherOptional.get();
+        log.info("Calculating fee for city: {}, vehicle: {}, weather: {}, datetime: {}", city, vehicleType, weather, datetime);
 
         double baseFee = calculateRegionalBaseFee(city, vehicleType);
         double atef = calculateAirTemperatureExtraFee(weather.getAirTemperature());

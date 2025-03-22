@@ -28,13 +28,15 @@ class DeliveryFeeTest {
     private DeliveryFee deliveryFee;
 
     private Weather weather;
+    private LocalDateTime testDateTime;
 
     @BeforeEach
     void setUp() {
+        testDateTime = LocalDateTime.now();
         weather = new Weather();
         weather.setStationName("Tallinn-Harku");
         weather.setWmoCode("26128");
-        weather.setTimestamp(LocalDateTime.now());
+        weather.setTimestamp(testDateTime);
     }
 
     @Test
@@ -48,10 +50,27 @@ class DeliveryFeeTest {
                 .thenReturn(Optional.of(weather));
 
         //when
-        double fee = deliveryFee.calculateDeliveryFee(City.TALLINN, VehicleType.CAR);
+        double fee = deliveryFee.calculateDeliveryFee(City.TALLINN, VehicleType.CAR, null);
 
         //then
-        assertEquals(4.0, fee, 0.001);
+        assertEquals(4.0, fee);
+    }
+
+    @Test
+    void testCalculateFeeInTallinnWithCarAndClearWeather_Historical() {
+        //given
+        weather.setStationName(City.TALLINN.getStationName());
+        weather.setAirTemperature(-5.0);
+        weather.setWindSpeed(12.0);
+        weather.setWeatherPhenomenon("Light snow");
+        when(weatherRepository.getWeatherForStationAtOrBefore(City.TALLINN.getStationName(), testDateTime))
+                .thenReturn(Optional.of(weather));
+
+        //when
+        double fee = deliveryFee.calculateDeliveryFee(City.TALLINN, VehicleType.CAR, testDateTime);
+
+        //then
+        assertEquals(6.0, fee);
     }
 
     @Test
@@ -65,10 +84,10 @@ class DeliveryFeeTest {
                 .thenReturn(Optional.of(weather));
 
         //when
-        double fee = deliveryFee.calculateDeliveryFee(City.TARTU, VehicleType.SCOOTER);
+        double fee = deliveryFee.calculateDeliveryFee(City.TARTU, VehicleType.SCOOTER, null);
 
         //then
-        assertEquals(3.0 + 1.0 + 1.0, fee, 0.001);
+        assertEquals(3.0 + 1.0 + 1.0, fee);
     }
 
     @Test
@@ -82,10 +101,10 @@ class DeliveryFeeTest {
                 .thenReturn(Optional.of(weather));
 
         //when
-        double fee = deliveryFee.calculateDeliveryFee(City.PARNU, VehicleType.BIKE);
+        double fee = deliveryFee.calculateDeliveryFee(City.PARNU, VehicleType.BIKE, null);
 
         //then
-        assertEquals(2.0 + 0.5 + 0.5, fee, 0.001);
+        assertEquals(2.0 + 0.5 + 0.5, fee);
     }
 
     @Test
@@ -100,7 +119,7 @@ class DeliveryFeeTest {
 
         //when
         UsageForbiddenException exception = assertThrows(UsageForbiddenException.class, () -> {
-            deliveryFee.calculateDeliveryFee(City.TALLINN, VehicleType.SCOOTER);
+            deliveryFee.calculateDeliveryFee(City.TALLINN, VehicleType.SCOOTER, null);
         });
 
         //then
@@ -119,7 +138,7 @@ class DeliveryFeeTest {
 
         //when
         UsageForbiddenException exception = assertThrows(UsageForbiddenException.class, () -> {
-            deliveryFee.calculateDeliveryFee(City.TARTU, VehicleType.BIKE);
+            deliveryFee.calculateDeliveryFee(City.TARTU, VehicleType.BIKE, null);
         });
 
         //then
@@ -134,11 +153,26 @@ class DeliveryFeeTest {
 
         //when
         IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
-            deliveryFee.calculateDeliveryFee(City.PARNU, VehicleType.CAR);
+            deliveryFee.calculateDeliveryFee(City.PARNU, VehicleType.CAR, null);
         });
 
         //then
         assertEquals("No weather data available for Pärnu", exception.getMessage());
+    }
+
+    @Test
+    void testCalculateFeeWithNoWeatherDataAtSpecifiedTimeThrowsException() {
+        //given
+        when(weatherRepository.getWeatherForStationAtOrBefore(City.PARNU.getStationName(), testDateTime))
+                .thenReturn(Optional.empty());
+
+        //when
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            deliveryFee.calculateDeliveryFee(City.PARNU, VehicleType.CAR, testDateTime);
+        });
+
+        //then
+        assertEquals("No weather data available for Pärnu at or before " + testDateTime, exception.getMessage());
     }
 
     @Test
@@ -152,9 +186,9 @@ class DeliveryFeeTest {
                 .thenReturn(Optional.of(weather));
 
         //when
-        double fee = deliveryFee.calculateDeliveryFee(City.TALLINN, VehicleType.CAR);
+        double fee = deliveryFee.calculateDeliveryFee(City.TALLINN, VehicleType.CAR, null);
 
         //then
-        assertEquals(4.0, fee, 0.001);
+        assertEquals(4.0, fee);
     }
 }
