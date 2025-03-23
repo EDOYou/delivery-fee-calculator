@@ -1,9 +1,11 @@
 package com.calculation.fee.delivery.service;
 
 import com.calculation.fee.delivery.exception.UsageForbiddenException;
+import com.calculation.fee.delivery.model.BusinessRule;
 import com.calculation.fee.delivery.model.City;
 import com.calculation.fee.delivery.model.VehicleType;
 import com.calculation.fee.delivery.model.Weather;
+import com.calculation.fee.delivery.repository.BusinessRuleRepository;
 import com.calculation.fee.delivery.repository.WeatherRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import static com.calculation.fee.delivery.util.TestUtils.createBusinessRule;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -24,10 +27,14 @@ class DeliveryFeeTest {
     @Mock
     private WeatherRepository weatherRepository;
 
+    @Mock
+    private BusinessRuleRepository businessRuleRepository;
+
     @InjectMocks
     private DeliveryFee deliveryFee;
 
     private Weather weather;
+    private BusinessRule businessRule;
     private LocalDateTime testDateTime;
 
     @BeforeEach
@@ -37,6 +44,9 @@ class DeliveryFeeTest {
         weather.setStationName("Tallinn-Harku");
         weather.setWmoCode("26128");
         weather.setTimestamp(testDateTime);
+
+        businessRule = createBusinessRule();
+        businessRuleRepository.save(businessRule);
     }
 
     @Test
@@ -48,6 +58,9 @@ class DeliveryFeeTest {
         weather.setWeatherPhenomenon("Clear");
         when(weatherRepository.getLatestWeatherForStation(City.TALLINN.getStationName()))
                 .thenReturn(Optional.of(weather));
+        when(businessRuleRepository.findFirstByOrderByTimestampDesc())
+                .thenReturn(Optional.of(businessRule));
+
 
         //when
         double fee = deliveryFee.calculateDeliveryFee(City.TALLINN, VehicleType.CAR, null);
@@ -65,6 +78,8 @@ class DeliveryFeeTest {
         weather.setWeatherPhenomenon("Light snow");
         when(weatherRepository.getWeatherForStationAtOrBefore(City.TALLINN.getStationName(), testDateTime))
                 .thenReturn(Optional.of(weather));
+        when(businessRuleRepository.findFirstByTimestampLessThanEqualOrderByTimestampDesc(testDateTime))
+                .thenReturn(Optional.of(businessRule));
 
         //when
         double fee = deliveryFee.calculateDeliveryFee(City.TALLINN, VehicleType.CAR, testDateTime);
@@ -82,6 +97,8 @@ class DeliveryFeeTest {
         weather.setWeatherPhenomenon("Heavy snow");
         when(weatherRepository.getLatestWeatherForStation(City.TARTU.getStationName()))
                 .thenReturn(Optional.of(weather));
+        when(businessRuleRepository.findFirstByOrderByTimestampDesc())
+                .thenReturn(Optional.of(businessRule));
 
         //when
         double fee = deliveryFee.calculateDeliveryFee(City.TARTU, VehicleType.SCOOTER, null);
@@ -99,6 +116,8 @@ class DeliveryFeeTest {
         weather.setWeatherPhenomenon("Light rain");
         when(weatherRepository.getLatestWeatherForStation(City.PARNU.getStationName()))
                 .thenReturn(Optional.of(weather));
+        when(businessRuleRepository.findFirstByOrderByTimestampDesc())
+                .thenReturn(Optional.of(businessRule));
 
         //when
         double fee = deliveryFee.calculateDeliveryFee(City.PARNU, VehicleType.BIKE, null);
@@ -116,6 +135,8 @@ class DeliveryFeeTest {
         weather.setWeatherPhenomenon("Clear");
         when(weatherRepository.getLatestWeatherForStation(City.TALLINN.getStationName()))
                 .thenReturn(Optional.of(weather));
+        when(businessRuleRepository.findFirstByOrderByTimestampDesc())
+                .thenReturn(Optional.of(businessRule));
 
         //when
         UsageForbiddenException exception = assertThrows(UsageForbiddenException.class, () -> {
@@ -135,6 +156,8 @@ class DeliveryFeeTest {
         weather.setWeatherPhenomenon("Thunderstorm");
         when(weatherRepository.getLatestWeatherForStation(City.TARTU.getStationName()))
                 .thenReturn(Optional.of(weather));
+        when(businessRuleRepository.findFirstByOrderByTimestampDesc())
+                .thenReturn(Optional.of(businessRule));
 
         //when
         UsageForbiddenException exception = assertThrows(UsageForbiddenException.class, () -> {
@@ -172,7 +195,7 @@ class DeliveryFeeTest {
         });
 
         //then
-        assertEquals("No weather data available for Pärnu at or before " + testDateTime, exception.getMessage());
+        assertEquals("No business rules available", exception.getMessage());
     }
 
     @Test
@@ -184,6 +207,8 @@ class DeliveryFeeTest {
         weather.setWeatherPhenomenon(null);
         when(weatherRepository.getLatestWeatherForStation(City.TALLINN.getStationName()))
                 .thenReturn(Optional.of(weather));
+        when(businessRuleRepository.findFirstByOrderByTimestampDesc())
+                .thenReturn(Optional.of(businessRule));
 
         //when
         double fee = deliveryFee.calculateDeliveryFee(City.TALLINN, VehicleType.CAR, null);

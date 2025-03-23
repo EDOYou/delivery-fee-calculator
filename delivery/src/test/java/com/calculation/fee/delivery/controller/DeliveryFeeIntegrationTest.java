@@ -1,6 +1,8 @@
 package com.calculation.fee.delivery.controller;
 
+import com.calculation.fee.delivery.model.BusinessRule;
 import com.calculation.fee.delivery.model.Weather;
+import com.calculation.fee.delivery.repository.BusinessRuleRepository;
 import com.calculation.fee.delivery.repository.WeatherRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import static com.calculation.fee.delivery.util.TestUtils.createBusinessRule;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -24,9 +27,18 @@ class DeliveryFeeIntegrationTest {
     @Autowired
     private WeatherRepository weatherRepository;
 
+    @Autowired
+    private BusinessRuleRepository businessRuleRepository;
+
+    private LocalDateTime baseTimestamp = LocalDateTime.now();;
+
     @BeforeEach
     void setUp() {
         weatherRepository.deleteAll();
+        businessRuleRepository.deleteAll();
+
+        BusinessRule businessRule = createBusinessRule();
+        businessRuleRepository.save(businessRule);
 
         Weather tallinnWeather = new Weather();
         tallinnWeather.setStationName("Tallinn-Harku");
@@ -37,14 +49,13 @@ class DeliveryFeeIntegrationTest {
         tallinnWeather.setTimestamp(LocalDateTime.now());
         weatherRepository.save(tallinnWeather);
 
-
         Weather tartuWeather = new Weather();
         tartuWeather.setStationName("Tartu-Tõravere");
         tartuWeather.setWmoCode("26242");
         tartuWeather.setAirTemperature(2.0);
         tartuWeather.setWindSpeed(5.0);
         tartuWeather.setWeatherPhenomenon("Clear");
-        tartuWeather.setTimestamp(LocalDateTime.now());
+        tartuWeather.setTimestamp(baseTimestamp);
         weatherRepository.save(tartuWeather);
 
         Weather parnuWeather = new Weather();
@@ -53,7 +64,7 @@ class DeliveryFeeIntegrationTest {
         parnuWeather.setAirTemperature(-15.0);
         parnuWeather.setWindSpeed(8.0);
         parnuWeather.setWeatherPhenomenon("Rain");
-        parnuWeather.setTimestamp(LocalDateTime.now());
+        parnuWeather.setTimestamp(baseTimestamp);
         weatherRepository.save(parnuWeather);
     }
 

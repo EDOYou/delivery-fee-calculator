@@ -1,108 +1,128 @@
 package com.calculation.fee.delivery.service;
 
 import com.calculation.fee.delivery.exception.UsageForbiddenException;
+import com.calculation.fee.delivery.model.BusinessRule;
 import com.calculation.fee.delivery.model.City;
 import com.calculation.fee.delivery.model.VehicleType;
 import com.calculation.fee.delivery.model.Weather;
+import com.calculation.fee.delivery.repository.BusinessRuleRepository;
 import com.calculation.fee.delivery.repository.WeatherRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
 
+/**
+ * This service class responible for calculating delivery fees based on city, vehicle type, weather conditions,and latest business rule
+ */
 @Service
 @Slf4j
 public class DeliveryFee {
 
     private final WeatherRepository weatherRepository;
+    private final BusinessRuleRepository businessRuleRepository;
 
-    public DeliveryFee(WeatherRepository weatherRepository) {
+    public DeliveryFee(WeatherRepository weatherRepository, BusinessRuleRepository businessRuleRepository) {
         this.weatherRepository = weatherRepository;
+        this.businessRuleRepository = businessRuleRepository;
     }
 
     /**
-     * Calculates the total delivery fee based on the city, vehicle type, and optional datetime.
+     * Calculates the total delivery fee for a given city and vehicle type, considering weather conditions
+     * and business rules for latest timestapm
      * <p>
-     * This method retrieves the weather data for the specified city, either the latest data or the data closest to
-     * the provided datetime (if specified), and calculates the delivery fee by combining the regional base fee (RBF)
-     * with extra fees based on weather conditions:
-     * - Air Temperature Extra Fee (ATEF): Applied for Scooter or Bike if temperature is below 0°C.
-     * - Wind Speed Extra Fee (WSEF): Applied for Bike if wind speed is between 10 m/s and 20 m/s.
-     * - Weather Phenomenon Extra Fee (WPEF): Applied for Scooter or Bike for snow, sleet, or rain.
-     * </p>
-     * <p>
-     * The method throws exceptions for invalid conditions:
-     * <p>- If no weather data is available for the city (or at the specified time), an IllegalStateException is thrown.
-     * <p>- If weather conditions forbid the usage of the vehicle type (e.g., wind speed > 20 m/s for Bike,
-     *   or glaze/hail/thunder for Scooter/Bike), a UsageForbiddenException is thrown.
+     * The total fee is calculated as the sum of:
+     * - Regional Base Fee (RBF): Base fee for the city and vehicle type
+     * - Air Temperature Extra Fee (ATEF): Additional fee based on air temperature
+     * - Wind Speed Extra Fee (WSEF): Additional fee based on wind speed, with restrictions for certain vehicle types
+     * - Weather Phenomenon Extra Fee (WPEF): Additional fee based on weather phenomena, with restrictions for certain vehicle types
      * </p>
      *
-     * @param city        The city for delivery (e.g., Tallinn, Tartu, Pärnu). Must not be null.
-     * @param vehicleType The vehicle type (e.g., Car, Scooter, Bike). Must not be null.
-     * @param datetime    The datetime for which to calculate the fee (optional). If null, the latest weather data is used.
-     * @return The total delivery fee in EUR, including the regional base fee and any applicable extra fees.
-     * @throws IllegalStateException If no weather data is available for the specified city or time.
-     * @throws UsageForbiddenException If weather conditions forbid the usage of the vehicle type.
+     * @param city The cities are TALLINN, TARTU or PARNU
+     * @param vehicleType The type of vehicle used are CAR, SCOOTER or BIKE
+     * @param datetime
+     * @return The total delivery fee
+     * @throws IllegalStateException If no weather data or business rules are available for the specified city or datetime
+     * @throws UsageForbiddenException If the weather conditions does not allow the use of the selected vehicle type
+     * @see City
+     * @see VehicleType
+     * @see BusinessRule
+     * @see Weather
+     *
+     * <p><b>Example Usage:</b></p>
+     * <pre>
+     * DeliveryFee deliveryFee = new DeliveryFee(weatherRepository, businessRuleRepository);
+     * <p>
+     * City city = City.TALLINN;
+     * <p>
+     * VehicleType vehicleType = VehicleType.CAR;
+     * <p>
+     * LocalDateTime datetime = LocalDateTime.of(2025, 3, 22, 10, 0);
+     * <p>
+     * double fee = feeService.calculateDeliveryFee(city, vehicleType, datetime);
+     * <p>
+     * System.out.println("Delivery fee: " + fee + " EUR");
+     * </pre>
      */
     public double calculateDeliveryFee(City city, VehicleType vehicleType, LocalDateTime datetime) {
-        Optional<Weather> weatherOptional;
+        Weather weather;
+        BusinessRule businessRule;
         if (datetime == null) {
-            weatherOptional = weatherRepository.getLatestWeatherForStation(city.getStationName());
+            weather = weatherRepository.getLatestWeatherForStation(city.getStationName())
+                    .orElseThrow(() -> new IllegalStateException("No weather data available for " + city.getStationName()));
+            businessRule = businessRuleRepository.findFirstByOrderByTimestampDesc()
+                    .orElseThrow(() -> new IllegalStateException("No business rules available"));
         } else {
-            weatherOptional = weatherRepository.getWeatherForStationAtOrBefore(city.getStationName(), datetime);
+            weather = weatherRepository.getWeatherForStationAtOrBefore(city.getStationName(), datetime)
+                    .orElseThrow(() -> new IllegalStateException("No business rules available"));
+            businessRule = businessRuleRepository.findFirstByTimestampLessThanEqualOrderByTimestampDesc(datetime)
+                    .orElseThrow(() -> new IllegalStateException("No business rules available at or before " + datetime));
         }
 
-        if (weatherOptional.isEmpty()) {
-            log.warn("No weather data available for station: {} at or before: {}", city.getStationName(), datetime);
-            throw new IllegalStateException("No weather data available for " + city.getStationName() + (datetime != null ? " at or before " + datetime : ""));
-        }
+        log.info("Calculating fee for city: {}, vehicle: {}, weather: {}, datetime: {}. Using business rule: {}", city, vehicleType, weather, datetime, businessRule);
 
-        Weather weather = weatherOptional.get();
-        log.info("Calculating fee for city: {}, vehicle: {}, weather: {}, datetime: {}", city, vehicleType, weather, datetime);
-
-        double baseFee = calculateRegionalBaseFee(city, vehicleType);
-        double atef = calculateAirTemperatureExtraFee(weather.getAirTemperature());
-        double wsef = calculateWindSpeedExtraFee(weather.getWindSpeed(), vehicleType);
-        double wpef = calculateWeatherPhenomenonExtraFee(weather.getWeatherPhenomenon(), vehicleType);
+        double baseFee = calculateRegionalBaseFee(city, vehicleType, businessRule);
+        double atef = calculateAirTemperatureExtraFee(weather.getAirTemperature(), businessRule);
+        double wsef = calculateWindSpeedExtraFee(weather.getWindSpeed(), vehicleType, businessRule);
+        double wpef = calculateWeatherPhenomenonExtraFee(weather.getWeatherPhenomenon(), vehicleType, businessRule);
 
         double totalFee = baseFee + atef + wsef + wpef;
         log.info("Total delivery fee: {} (RBF: {}, ATEF: {}, WSEF: {}, WPEF: {})", totalFee, baseFee, atef, wsef, wpef);
         return totalFee;
     }
 
-    private double calculateRegionalBaseFee(City city, VehicleType vehicleType) {
+    private double calculateRegionalBaseFee(City city, VehicleType vehicleType, BusinessRule businessRules) {
         switch (city) {
             case TALLINN:
                 return switch (vehicleType) {
-                    case CAR -> 4.0;
-                    case SCOOTER -> 3.5;
-                    case BIKE -> 3.0;
+                    case CAR -> businessRules.getTallinnCarBaseFee();
+                    case SCOOTER -> businessRules.getTallinnScooterBaseFee();
+                    case BIKE -> businessRules.getTallinnBikeBaseFee();
                 };
             case TARTU:
                 return switch (vehicleType) {
-                    case CAR -> 3.5;
-                    case SCOOTER -> 3.0;
-                    case BIKE -> 2.5;
+                    case CAR -> businessRules.getTartuCarBaseFee();
+                    case SCOOTER -> businessRules.getTartuScooterBaseFee();
+                    case BIKE -> businessRules.getTartuBikeBaseFee();
                 };
             case PARNU:
                 return switch (vehicleType) {
-                    case CAR -> 3.0;
-                    case SCOOTER -> 2.5;
-                    case BIKE -> 2.0;
+                    case CAR -> businessRules.getParnuCarBaseFee();
+                    case SCOOTER -> businessRules.getParnuScooterBaseFee();
+                    case BIKE -> businessRules.getParnuBikeBaseFee();
                 };
         }
         throw new IllegalStateException("Invalid city or vehicle type combination");
     }
 
-    private double calculateAirTemperatureExtraFee(Double airTemperature) {
+    private double calculateAirTemperatureExtraFee(Double airTemperature, BusinessRule businessRules) {
         if (airTemperature == null) return 0.0;
-        if (airTemperature < -10) return 1.0;
-        if (airTemperature < 0) return 0.5;
+        if (airTemperature < -10) return businessRules.getAtefBelowMinusTen();
+        if (airTemperature < 0) return businessRules.getAtefBelowZero();
         return 0.0;
     }
 
-    private double calculateWindSpeedExtraFee(Double windSpeed, VehicleType vehicleType) {
+    private double calculateWindSpeedExtraFee(Double windSpeed, VehicleType vehicleType, BusinessRule businessRules) {
         if (windSpeed == null) {
             return 0.0;
         }
@@ -110,12 +130,12 @@ public class DeliveryFee {
             throw new UsageForbiddenException("Usage of selected vehicle type is forbidden. Vehicle type: " + vehicleType.name() + " Wind speed: " + windSpeed + " m/s");
         }
         if (windSpeed >= 10 && windSpeed < 20) {
-            return 0.5;
+            return businessRules.getWsefFee();
         }
         return 0.0;
     }
 
-    private double calculateWeatherPhenomenonExtraFee(String phenomenon, VehicleType vehicleType) {
+    private double calculateWeatherPhenomenonExtraFee(String phenomenon, VehicleType vehicleType, BusinessRule businessRules) {
         if (phenomenon == null || phenomenon.trim().isEmpty()) {
             return 0.0;
         }
@@ -128,10 +148,10 @@ public class DeliveryFee {
         }
 
         if (phenomenonLower.contains("snow") || phenomenonLower.contains("sleet")) {
-            return 1.0;
+            return businessRules.getWpefSnowOrSleet();
         }
         if (phenomenonLower.contains("rain")) {
-            return 0.5;
+            return businessRules.getWpefRain();
         }
         return 0.0;
     }
